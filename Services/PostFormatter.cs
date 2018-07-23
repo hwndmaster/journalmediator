@@ -15,6 +15,7 @@ namespace JournalMediator.Services
     public class PostFormatter : IPostFormatter
     {
         private readonly int _maxWidth = 712;
+        private readonly int _maxHeight = 600;
         private readonly int _gapBetweenPhotos = 4;
 
         /// <summary>
@@ -163,7 +164,7 @@ namespace JournalMediator.Services
             var numerator = photosInLine.Aggregate(1L, (i, photo) => i * photo.OriginalHeight);
             var denominator = photosInLine.Sum(x => x.OriginalWidth * photosInLine.Where(p0 => p0 != x).Aggregate(1L, (i, p0) => i * p0.OriginalHeight));
             var desiredHeight = Math.Round(maxWidthInLine * numerator / denominator);
-            return desiredHeight;
+            return Math.Min(_maxHeight, desiredHeight);
         }
 
         private string WrapContentWithCenteredDiv(string content)
