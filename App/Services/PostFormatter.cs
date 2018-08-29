@@ -43,6 +43,11 @@ namespace JournalMediator.Services
             return content;
         }
 
+        public string WrapContentWithBetterFont(string content)
+        {
+            return $"<div style='font-size:110%;font-family:Arial,sans-serif'>{content}</div>";
+        }
+
         private string FormatHyperlinks(string content)
         {
             content = _reHyperlinkDefinition.Replace(content, (m) =>
@@ -141,7 +146,7 @@ namespace JournalMediator.Services
         private string InjectLjCutToPost(string content)
         {
             var matches = Regex.Matches(content, @"</div>\s{0,}");
-            if (matches.Count == 0)
+            if (matches.Count == 0 || matches[0].Index + matches[0].Length == content.Length)
                 return content;
 
             var splitIndex1 = matches[0].Index + matches[0].Length;
@@ -170,11 +175,6 @@ namespace JournalMediator.Services
         private string WrapContentWithCenteredDiv(string content)
         {
             return $"<div style='text-align: center'>{content}</div>";
-        }
-
-        private string WrapContentWithBetterFont(string content)
-        {
-            return $"<div style='font-size:110%;font-family:Arial,sans-serif'>{content}</div>";
         }
     }
 }

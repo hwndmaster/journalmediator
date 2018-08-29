@@ -10,9 +10,9 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/bin/Debug/netcoreapp2.1/JournalMediator.dll",
+            "program": "${workspaceFolder}/App/bin/Debug/netcoreapp2.1/JournalMediator.dll",
             "args": [
-                "-f", "C:\\Users\\hwndm\\Google Drive\\jtext\\Thoughts and Blogging\\жж - вьетнам.jtxt",
+                "-f", "C:\\Users\\hwndm\\Google Drive\\jtext\\Thoughts and Blogging\\жж - португалия uber.jtxt",
                 //"-c", "2" // Cat Ba
             ],
             "cwd": "${workspaceFolder}",
