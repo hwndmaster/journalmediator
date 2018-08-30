@@ -2,21 +2,22 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using FlickrNet;
 using JournalMediator.Models;
 
 namespace JournalMediator.Services
 {
     public interface IPostFormatter
     {
-        string FormatPost(InputChapter chapter, IEnumerable<Photo> photos);
+        string FormatPost(InputChapter chapter, IEnumerable<PhotoInfo> photos);
     }
 
     public class PostFormatter : IPostFormatter
     {
-        private readonly int _maxWidth = 712;
-        private readonly int _maxHeight = 600;
-        private readonly int _gapBetweenPhotos = 4;
+        private const int MAX_WIDTH = 712;
+        private const int MAX_HEIGHT = 600;
+        private const int GAP_BETWEEN_PHOTOS = 4;
+
+        private readonly IHtmlPartProvider _html;
 
         /// <summary>
         /// Like: [DSC_9992] [DSC_9997]
@@ -30,7 +31,12 @@ namespace JournalMediator.Services
         /// </summary>
         private readonly Regex _reHyperlinkDefinition = new Regex(@"\|(?<link>.+?)\|(?<title>.+?)\|");
 
-        public string FormatPost(InputChapter chapter, IEnumerable<Photo> photos)
+        public PostFormatter(IHtmlPartProvider html)
+        {
+            _html = html;
+        }
+
+        public string FormatPost(InputChapter chapter, IEnumerable<PhotoInfo> photos)
         {
             var content = chapter.Content;
             content = FormatPhotoPlaceholders(content, photos);
@@ -43,11 +49,6 @@ namespace JournalMediator.Services
             return content;
         }
 
-        public string WrapContentWithBetterFont(string content)
-        {
-            return $"<div style='font-size:110%;font-family:Arial,sans-serif'>{content}</div>";
-        }
-
         private string FormatHyperlinks(string content)
         {
             content = _reHyperlinkDefinition.Replace(content, (m) =>
@@ -57,12 +58,12 @@ namespace JournalMediator.Services
                 {
                     url = "http://" + url;
                 }
-                return $@"<a href='{url}' target='_blank'>{m.Groups["title"].Value}</a>";
+                return _html.Link(url, m.Groups["title"].Value);
             });
             return content;
         }
 
-        private string FormatPhotoPlaceholders(string content, IEnumerable<Photo> photos)
+        private string FormatPhotoPlaceholders(string content, IEnumerable<PhotoInfo> photos)
         {
             var photosBySourceName = photos.ToDictionary(x => x.Title);
 
@@ -80,15 +81,17 @@ namespace JournalMediator.Services
                 var line = "";
                 foreach (var photo in photosInLine)
                 {
-                    var desiredWidth = (int)Math.Round(photo.photo.OriginalWidth * desiredHeight / photo.photo.OriginalHeight);
+                    var desiredWidth = (int)Math.Round(photo.photo.Width * desiredHeight / photo.photo.Height);
 
                     if (line.Length > 0)
                         line += " ";
-                    line += $"<a href='{photo.photo.WebUrl}'><img src='{GetPhotoUrlWithSize(photo.photo, desiredWidth, (int)desiredHeight)}' height='{desiredHeight}' width='{desiredWidth}' /></a>";
+                    line += _html.Image(photo.photo.WebUrl,
+                        GetPhotoUrlWithSize(photo.photo, desiredWidth, (int)desiredHeight),
+                        (int)desiredHeight, desiredWidth);
 
                     if (!string.IsNullOrEmpty(photo.title))
                     {
-                        line += Environment.NewLine + "<span style='color:gray'>" + photo.title + "</span>";
+                        line += Environment.NewLine + _html.Title(photo.title);
                     }
                 }
 
@@ -97,7 +100,7 @@ namespace JournalMediator.Services
             return content;
         }
 
-        private string GetPhotoUrlWithSize(Photo photo, int desiredWidth, int desiredHeight)
+        private string GetPhotoUrlWithSize(PhotoInfo photo, int desiredWidth, int desiredHeight)
         {
             var maxSide = Math.Max(desiredWidth, desiredHeight);
 
@@ -125,7 +128,7 @@ namespace JournalMediator.Services
         private string FormatStrikeOuts(string content)
         {
             return Regex.Replace(content, @"(?<=\s)-(?<text>\w[\w\s]*\w)-(?=\s)", (m) =>
-                $"<s>{m.Groups["text"].Value}</s>");
+                _html.Strikeout(m.Groups["text"].Value));
         }
 
         /// <summary>
@@ -139,13 +142,13 @@ namespace JournalMediator.Services
         private string FormatBlockquotes(string content)
         {
             return Regex.Replace(content, @"\r\n{\r\n(?<text>.+?)\r\n}\r\n", (m) =>
-                $"<blockquote style='font-style: italic; color: dimgray'>{m.Groups["text"].Value}</blockquote>",
+                _html.Blockquote(m.Groups["text"].Value),
                 RegexOptions.Singleline | RegexOptions.Multiline);
         }
 
         private string InjectLjCutToPost(string content)
         {
-            var matches = Regex.Matches(content, @"</div>\s{0,}");
+            var matches = Regex.Matches(content, _html.DivEnd + @"\s{0,}");
             if (matches.Count == 0 || matches[0].Index + matches[0].Length == content.Length)
                 return content;
 
@@ -153,28 +156,29 @@ namespace JournalMediator.Services
             var splitIndex2 = matches[matches.Count - 1].Index;
 
             content = content.Substring(0, splitIndex1)
-                      + "</div><lj-cut><div style='font-size:110%;font-family:Arial,sans-serif'>"
-                      + content.Substring(splitIndex1, splitIndex2 - splitIndex1)
-                      + content.Substring(splitIndex2)
-                      + "</lj-cut>";
+                + _html.DivEnd + _html.LjCut(
+                    _html.DivForTextStart
+                    + content.Substring(splitIndex1, splitIndex2 - splitIndex1)
+                    + content.Substring(splitIndex2)
+                );
 
             return content;
         }
 
-        private double CalculateHeightForPhotosOnTheSameLine(IReadOnlyCollection<Photo> photosInLine)
+        private double CalculateHeightForPhotosOnTheSameLine(IReadOnlyCollection<PhotoInfo> photosInLine)
         {
-            var totalGapsWidth = (photosInLine.Count - 1) * _gapBetweenPhotos;
-            var totalWithOfPhotos = photosInLine.Sum(x => x.OriginalWidth);
-            double maxWidthInLine = Math.Min(_maxWidth, totalWithOfPhotos) - totalGapsWidth;
-            var numerator = photosInLine.Aggregate(1L, (i, photo) => i * photo.OriginalHeight);
-            var denominator = photosInLine.Sum(x => x.OriginalWidth * photosInLine.Where(p0 => p0 != x).Aggregate(1L, (i, p0) => i * p0.OriginalHeight));
+            var totalGapsWidth = (photosInLine.Count - 1) * GAP_BETWEEN_PHOTOS;
+            var totalWithOfPhotos = photosInLine.Sum(x => x.Width);
+            double maxWidthInLine = Math.Min(MAX_WIDTH, totalWithOfPhotos) - totalGapsWidth;
+            var numerator = photosInLine.Aggregate(1L, (i, photo) => i * photo.Height);
+            var denominator = photosInLine.Sum(x => x.Width * photosInLine.Where(p0 => p0 != x).Aggregate(1L, (i, p0) => i * p0.Height));
             var desiredHeight = Math.Round(maxWidthInLine * numerator / denominator);
-            return Math.Min(_maxHeight, desiredHeight);
+            return Math.Min(MAX_HEIGHT, desiredHeight);
         }
 
-        private string WrapContentWithCenteredDiv(string content)
-        {
-            return $"<div style='text-align: center'>{content}</div>";
-        }
+        private string WrapContentWithCenteredDiv(string content) => _html.Centered(content);
+
+        private string WrapContentWithBetterFont(string content)
+            => $"{_html.DivForTextStart}{content}{_html.DivEnd}";
     }
 }

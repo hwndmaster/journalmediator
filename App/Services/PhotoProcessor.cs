@@ -3,7 +3,6 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using FlickrNet;
 using JournalMediator.Models;
 using Size = System.Drawing.Size;
 
@@ -11,7 +10,7 @@ namespace JournalMediator.Services
 {
     public interface IPhotoProcessor
     {
-        void FillUpDimensions(InputDocument inputDoc, Photo photo);
+        void FillUpDimensions(InputDocument inputDoc, PhotoInfo photo);
         void ResizePhotoForUpload(PhotoFile photo, out Stream resizedPhotoStream);
     }
 
@@ -27,13 +26,13 @@ namespace JournalMediator.Services
             _jpegEncoder = ImageCodecInfo.GetImageDecoders().First(x => x.FormatID == ImageFormat.Jpeg.Guid);
         }
 
-        public void FillUpDimensions(InputDocument inputDoc, Photo photo)
+        public void FillUpDimensions(InputDocument inputDoc, PhotoInfo photo)
         {
             var imageFile = inputDoc.PhotoFilePaths.First(x => x.Name == photo.Title).FilePath;
             using (var bitmap = Image.FromFile(imageFile))
             {
-                photo.OriginalHeight = bitmap.Height;
-                photo.OriginalWidth = bitmap.Width;
+                photo.Height = bitmap.Height;
+                photo.Width = bitmap.Width;
             }
         }
 

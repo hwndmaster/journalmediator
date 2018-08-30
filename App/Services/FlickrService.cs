@@ -6,13 +6,14 @@ using System.Threading.Tasks;
 using FlickrNet;
 using JournalMediator.Models;
 using Microsoft.Extensions.Configuration;
+using PhotoInfo = JournalMediator.Models.PhotoInfo;
 
 namespace JournalMediator.Services
 {
     public interface IFlickrService
     {
         Task<Photoset> GetAlbumAsync(string albumName);
-        Task<IEnumerable<Photo>> GetPhotosAsync(InputDocument inputDoc, bool fetchAllInfo = false);
+        Task<IEnumerable<PhotoInfo>> GetPhotosAsync(InputDocument inputDoc, bool fetchAllInfo = false);
         Task UploadPhotosAsync(string albumName, IEnumerable<PhotoFile> photos, bool resize);
     }
 
@@ -40,17 +41,17 @@ namespace JournalMediator.Services
             return albums.FirstOrDefault(x => x.Title == albumName);
         }
 
-        public async Task<IEnumerable<Photo>> GetPhotosAsync(InputDocument inputDoc, bool fetchAllInfo = false)
+        public async Task<IEnumerable<PhotoInfo>> GetPhotosAsync(InputDocument inputDoc, bool fetchAllInfo = false)
         {
             if (inputDoc.AlbumName == null)
             {
-                return Enumerable.Empty<Photo>();
+                return Enumerable.Empty<PhotoInfo>();
             }
 
             var album = await GetAlbumAsync(inputDoc.AlbumName);
             if (album == null)
             {
-                return Enumerable.Empty<Photo>();
+                return Enumerable.Empty<PhotoInfo>();
             }
 
             var extras = fetchAllInfo
@@ -58,16 +59,17 @@ namespace JournalMediator.Services
                     | PhotoSearchExtras.Medium640Url | PhotoSearchExtras.Small320Url
                 : PhotoSearchExtras.None;
             var result = await _flickr.PhotosetsGetPhotosAsync(album.PhotosetId, extras);
+            var photos = result.Select(x => new Models.PhotoInfo(x));
 
             if (fetchAllInfo)
             {
-                foreach (var photo in result.Where(x => x.OriginalHeight == 0))
+                foreach (var photo in photos.Where(x => x.Height == 0))
                 {
                     _photoProcessor.FillUpDimensions(inputDoc, photo);
                 }
             }
 
-            return result;
+            return photos;
         }
 
         public async Task UploadPhotosAsync(string albumName, IEnumerable<PhotoFile> photos, bool resize)

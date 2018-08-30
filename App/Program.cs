@@ -44,6 +44,7 @@ namespace JournalMediator
                 .AddSingleton<Workflow>()
                 .AddSingleton<IFileService, FileService>()
                 .AddSingleton<IFlickrService, FlickrService>()
+                .AddSingleton<IHtmlPartProvider, HtmlPartProvider>()
                 .AddSingleton<IInputDocumentParser, InputDocumentParser>()
                 .AddSingleton<IPostFormatter, PostFormatter>()
                 .AddSingleton<IPhotoProcessor, PhotoProcessor>()
