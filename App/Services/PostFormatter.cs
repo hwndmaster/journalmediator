@@ -78,6 +78,7 @@ namespace JournalMediator.Services
                                     let name = photoMatch.Groups["name"].Value.ToLower()
                                     let valid = photosBySourceName.ContainsKey(name)
                                     select new {
+                                        name,
                                         photo = valid ? photosBySourceName[name] : null,
                                         title = photoMatch.Groups["title"].Success ? photoMatch.Groups["title"].Value : null,
                                         valid
@@ -101,7 +102,7 @@ namespace JournalMediator.Services
                     }
                     else
                     {
-                        line += "!!NO PICTURE FOUND!!";
+                        line += "<div style='padding: 40px 20px; border: 1px solid red; display: inline-block; color: red;'>NO PICTURE FOUND: '" + photo.name + "'</div>";
                     }
 
                     if (!string.IsNullOrEmpty(photo.title))
@@ -157,7 +158,7 @@ namespace JournalMediator.Services
 
         private string FormatBlockquotes(string content)
         {
-            return Regex.Replace(content, @"\r\n{\r\n(?<text>.+?)\r\n}\r\n", (m) =>
+            return Regex.Replace(content, @"(^|\r\n){\r\n(?<text>.+?)\r\n}\r\n", (m) =>
                 _html.Blockquote(m.Groups["text"].Value),
                 RegexOptions.Singleline | RegexOptions.Multiline);
         }

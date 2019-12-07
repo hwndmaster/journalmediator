@@ -17,7 +17,7 @@ namespace JournalMediator.Services
     public class HtmlPartProvider : IHtmlPartProvider
     {
         public string Blockquote(string text)
-            => $"<blockquote style='font-style: italic; color: dimgray'>{text}</blockquote>";
+            => $"<blockquote style='font-style: italic; color: dimgray; text-align: right;'>{text}</blockquote>";
 
         public string Centered(string text)
             => $"<div style='text-align: center'>{text}</div>";
