@@ -21,6 +21,7 @@ namespace JournalMediator
             app.HelpOption();
             var optFileName = app.Option("-f <FILENAME>", "Input document file name", CommandOptionType.SingleValue);
             var optChapter = app.Option<int>("-c <CHAPTER_NUMBER>", "Chapter number", CommandOptionType.SingleValue);
+            var localLinking = app.Option("-l", "Link local photos only without upload", CommandOptionType.NoValue);
 
             Configuration = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json", false, false)
@@ -32,7 +33,8 @@ namespace JournalMediator
             {
                 await serviceProvider.GetService<Workflow>().Run(
                     optFileName.Value(),
-                    optChapter.HasValue() ? optChapter.ParsedValue : (int?)null);
+                    optChapter.HasValue() ? optChapter.ParsedValue : (int?)null,
+                    localLinking.HasValue());
             });
 
             return app.Execute(args);

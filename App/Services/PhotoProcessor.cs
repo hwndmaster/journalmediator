@@ -10,6 +10,7 @@ namespace JournalMediator.Services
 {
     public interface IPhotoProcessor
     {
+        PhotoInfo CreatePhotoInfoFromFile(PhotoFile photoFile);
         void FillUpDimensions(InputDocument inputDoc, PhotoInfo photo);
         void ResizePhotoForUpload(PhotoFile photo, out Stream resizedPhotoStream);
     }
@@ -26,13 +27,36 @@ namespace JournalMediator.Services
             _jpegEncoder = ImageCodecInfo.GetImageDecoders().First(x => x.FormatID == ImageFormat.Jpeg.Guid);
         }
 
+        public PhotoInfo CreatePhotoInfoFromFile(PhotoFile photoFile)
+        {
+            var uri = new System.Uri(photoFile.FilePath);
+
+            var info = new Models.PhotoInfo {
+                Title = photoFile.Name,
+                WebUrl = uri.AbsoluteUri,
+                Small320Url = uri.AbsoluteUri,
+                Medium640Url = uri.AbsoluteUri,
+                Medium800Url = uri.AbsoluteUri,
+                LargeUrl = uri.AbsoluteUri
+            };
+
+            FillUpDimensions(photoFile, info);
+
+            return info;
+        }
+
         public void FillUpDimensions(InputDocument inputDoc, PhotoInfo photo)
         {
-            var imageFile = inputDoc.PhotoFilePaths.First(x => x.Name == photo.Title).FilePath;
-            using (var bitmap = Image.FromFile(imageFile))
+            var photoFile = inputDoc.PhotoFilePaths.First(x => x.Name == photo.Title);
+            FillUpDimensions(photoFile, photo);
+        }
+
+        private void FillUpDimensions(PhotoFile photoFile, PhotoInfo photoInfo)
+        {
+            using (var bitmap = Image.FromFile(photoFile.FilePath))
             {
-                photo.Height = bitmap.Height;
-                photo.Width = bitmap.Width;
+                photoInfo.Height = bitmap.Height;
+                photoInfo.Width = bitmap.Width;
             }
         }
 

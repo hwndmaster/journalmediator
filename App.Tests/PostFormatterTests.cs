@@ -18,6 +18,8 @@ namespace JournalMediator.Tests
 
             _htmlMock.SetupGet(x => x.DivForTextStart).Returns("");
             _htmlMock.SetupGet(x => x.DivEnd).Returns("");
+            _htmlMock.Setup(x => x.Blockquote(It.IsAny<string>()))
+                .Returns((string text) => $"@{text}@");
             _htmlMock.Setup(x => x.Centered(It.IsAny<string>())).Returns((string text) => $"c[{text}]");
             _htmlMock.Setup(x => x.Image(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .Returns((string url, string src, int height, int width) => $"<{url}/{src}/{height}/{width}>");
@@ -25,6 +27,8 @@ namespace JournalMediator.Tests
                 .Returns((string url, string title) => $"<{url}-{title}>");
             _htmlMock.Setup(x => x.LjCut(It.IsAny<string>()))
                 .Returns((string text) => text);
+            _htmlMock.Setup(x => x.Strikeout(It.IsAny<string>()))
+                .Returns((string text) => $"={text}=");
         }
 
         [Fact]
@@ -36,7 +40,7 @@ namespace JournalMediator.Tests
             };
 
             // Act
-            var output = _formatter.FormatPost(chapter, new List<PhotoInfo>());
+            var output = _formatter.FormatPost(chapter, new List<PhotoInfo>(), false);
 
             // Verify
             Assert.Equal("test", output);
@@ -51,7 +55,7 @@ namespace JournalMediator.Tests
             };
 
             // Act
-            var output = _formatter.FormatPost(chapter, new List<PhotoInfo>());
+            var output = _formatter.FormatPost(chapter, new List<PhotoInfo>(), false);
 
             // Verify
             Assert.Equal("test <http://url-title> test", output);
@@ -75,10 +79,44 @@ namespace JournalMediator.Tests
             };
 
             // Act
-            var output = _formatter.FormatPost(chapter, photos);
+            var output = _formatter.FormatPost(chapter, photos, false);
 
             // Verify
             Assert.Equal("test\nc[<web-url/small-url/120/100>]\ntest", output);
+        }
+
+        [Fact]
+        public void Formatting_strikeouts()
+        {
+            // Arrange
+            var chapter = new InputChapter {
+                Content = "test -strickedout- test"
+            };
+
+            // Act
+            var output = _formatter.FormatPost(chapter, new List<PhotoInfo>(), false);
+
+            // Verify
+            Assert.Equal("test =strickedout= test", output);
+        }
+
+        [Fact]
+        public void Formatting_blockquotes()
+        {
+            // Arrange
+            var chapter = new InputChapter {
+                Content = @"test
+{
+    blockquote
+}
+test"
+            };
+
+            // Act
+            var output = _formatter.FormatPost(chapter, new List<PhotoInfo>(), false);
+
+            // Verify
+            Assert.Equal(@"test@    blockquote@test", output);
         }
     }
 }

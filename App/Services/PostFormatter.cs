@@ -8,7 +8,7 @@ namespace JournalMediator.Services
 {
     public interface IPostFormatter
     {
-        string FormatPost(InputChapter chapter, IEnumerable<PhotoInfo> photos);
+        string FormatPost(InputChapter chapter, IEnumerable<PhotoInfo> photos, bool simulateLjLayout);
     }
 
     public class PostFormatter : IPostFormatter
@@ -36,7 +36,7 @@ namespace JournalMediator.Services
             _html = html;
         }
 
-        public string FormatPost(InputChapter chapter, IEnumerable<PhotoInfo> photos)
+        public string FormatPost(InputChapter chapter, IEnumerable<PhotoInfo> photos, bool simulateLjLayout)
         {
             var content = chapter.Content;
             content = FormatPhotoPlaceholders(content, photos);
@@ -45,6 +45,11 @@ namespace JournalMediator.Services
             content = FormatBlockquotes(content);
             content = WrapContentWithBetterFont(content);
             content = InjectLjCutToPost(content);
+
+            if (simulateLjLayout)
+            {
+                content = WrapWithLjLayout(chapter, content);
+            }
 
             return content;
         }
@@ -69,25 +74,35 @@ namespace JournalMediator.Services
 
             content = _reLineWithPhotoDefinitions.Replace(content, (m) =>
             {
-                var photosInLine = _rePhotoDefinition.Matches(m.Value).Cast<Match>()
-                    .Select(x => new
-                    {
-                        photo = photosBySourceName[x.Groups["name"].Value.ToLower()],
-                        title = x.Groups["title"].Success ? x.Groups["title"].Value : null
-                    }).ToArray();
+                var photosInLine = (from photoMatch in _rePhotoDefinition.Matches(m.Value).Cast<Match>()
+                                    let name = photoMatch.Groups["name"].Value.ToLower()
+                                    let valid = photosBySourceName.ContainsKey(name)
+                                    select new {
+                                        photo = valid ? photosBySourceName[name] : null,
+                                        title = photoMatch.Groups["title"].Success ? photoMatch.Groups["title"].Value : null,
+                                        valid
+                                    }).ToArray();
 
-                double desiredHeight = CalculateHeightForPhotosOnTheSameLine(photosInLine.Select(x => x.photo).ToList());
+                double desiredHeight = CalculateHeightForPhotosOnTheSameLine(
+                    photosInLine.Where(x => x.valid).Select(x => x.photo).ToList());
 
                 var line = "";
                 foreach (var photo in photosInLine)
                 {
-                    var desiredWidth = (int)Math.Round(photo.photo.Width * desiredHeight / photo.photo.Height);
+                    if (photo.valid)
+                    {
+                        var desiredWidth = (int)Math.Round(photo.photo.Width * desiredHeight / photo.photo.Height);
 
-                    if (line.Length > 0)
-                        line += " ";
-                    line += _html.Image(photo.photo.WebUrl,
-                        GetPhotoUrlWithSize(photo.photo, desiredWidth, (int)desiredHeight),
-                        (int)desiredHeight, desiredWidth);
+                        if (line.Length > 0)
+                            line += " ";
+                        line += _html.Image(photo.photo.WebUrl,
+                            GetPhotoUrlWithSize(photo.photo, desiredWidth, (int)desiredHeight),
+                            (int)desiredHeight, desiredWidth);
+                    }
+                    else
+                    {
+                        line += "!!NO PICTURE FOUND!!";
+                    }
 
                     if (!string.IsNullOrEmpty(photo.title))
                     {
@@ -139,6 +154,7 @@ namespace JournalMediator.Services
         ///     }
         ///     blablabla
         /// </summary>
+
         private string FormatBlockquotes(string content)
         {
             return Regex.Replace(content, @"\r\n{\r\n(?<text>.+?)\r\n}\r\n", (m) =>
@@ -180,5 +196,16 @@ namespace JournalMediator.Services
 
         private string WrapContentWithBetterFont(string content)
             => $"{_html.DivForTextStart}{content}{_html.DivEnd}";
+
+        private string WrapWithLjLayout(InputChapter chapter, string content)
+        {
+            content = content.Replace(Environment.NewLine, "<br/>");
+            content = $@"<style>a {{ color: #889 }}</style>
+<body style=""background: #343f4a; color: #ccc; font-family: 'trebuchet ms',helvetica,arial,sans-serif"">
+<div style=""width:770px; padding: 20px; background: #101921"">
+<h3 style=""color: #f93; margin: 10px 0"">{chapter.Title}</h3>{content}</div></body>";
+
+            return content;
+        }
     }
 }

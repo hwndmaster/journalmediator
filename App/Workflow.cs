@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using JournalMediator.Services;
+using PhotoInfo = JournalMediator.Models.PhotoInfo;
 
 namespace JournalMediator
 {
@@ -10,13 +11,14 @@ namespace JournalMediator
         private readonly IFileService _fileSvc;
         private readonly IFlickrService _flickr;
         private readonly IInputDocumentParser _inputDocParser;
+        private readonly IPhotoProcessor _photoProcessor;
         private readonly IPostFormatter _formatter;
         private readonly IUiController _ui;
         private readonly IValidator _validator;
 
         public Workflow(IUiController uiController, IFlickrService flickrService,
             IInputDocumentParser inputDocumentParser, IFileService fileService,
-            IValidator validator, IPostFormatter formatter)
+            IValidator validator, IPostFormatter formatter, IPhotoProcessor photoProcessor)
         {
             _ui = uiController;
             _flickr = flickrService;
@@ -24,9 +26,10 @@ namespace JournalMediator
             _fileSvc = fileService;
             _formatter = formatter;
             _validator = validator;
+            _photoProcessor = photoProcessor;
         }
 
-        public async Task Run(string fileName, int? chapterNo)
+        public async Task Run(string fileName, int? chapterNo, bool localLinking)
         {
             try
             {
@@ -36,15 +39,32 @@ namespace JournalMediator
 
                 var photos = _inputDocParser.GetPhotosUsedInContent(chapter.Content);
                 inputDoc.PhotoFilePaths = _fileSvc.GatherPhotoPaths(inputDoc, photos).ToArray();
-                _validator.CheckGatheredFiles(photos, inputDoc.PhotoFilePaths);
 
-                var photosOnServer = await _flickr.GetPhotosAsync(inputDoc);
-                var photosToUpload = photos.Except(photosOnServer.Select(x => x.Title.ToLower())).ToList();
+                var validationErrors = _validator.CheckGatheredFiles(photos, inputDoc.PhotoFilePaths).ToList();
+                if (localLinking)
+                {
+                    validationErrors.ForEach(x => _ui.Danger(x));
+                }
+                else
+                {
+                    throw new InvalidOperationException(string.Join("\r\n", validationErrors));
+                }
 
-                await _flickr.UploadPhotosAsync(inputDoc.AlbumName, inputDoc.PhotoFilePaths.Where(x => photosToUpload.Contains(x.Name)), true);
-                photosOnServer = await _flickr.GetPhotosAsync(inputDoc, true);
+                var photosOnServer = Enumerable.Empty<PhotoInfo>();
+                if (!localLinking)
+                {
+                    photosOnServer = await _flickr.GetPhotosAsync(inputDoc);
+                    var photosToUpload = photos.Except(photosOnServer.Select(x => x.Title.ToLower())).ToList();
 
-                var output = _formatter.FormatPost(chapter, photosOnServer);
+                    await _flickr.UploadPhotosAsync(inputDoc.AlbumName, inputDoc.PhotoFilePaths.Where(x => photosToUpload.Contains(x.Name)), true);
+                    photosOnServer = await _flickr.GetPhotosAsync(inputDoc, true);
+                }
+                else
+                {
+                    photosOnServer = inputDoc.PhotoFilePaths.Select(_photoProcessor.CreatePhotoInfoFromFile);
+                }
+
+                var output = _formatter.FormatPost(chapter, photosOnServer, localLinking);
                 await _fileSvc.SaveOutputAsync(inputDoc, chapter, output);
 
                 _ui.WriteLine("Done!");
