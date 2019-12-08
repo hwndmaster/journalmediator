@@ -45,7 +45,7 @@ namespace JournalMediator
                 {
                     validationErrors.ForEach(x => _ui.Danger(x));
                 }
-                else
+                else if (validationErrors.Any())
                 {
                     throw new InvalidOperationException(string.Join("\r\n", validationErrors));
                 }

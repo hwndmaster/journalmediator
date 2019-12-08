@@ -23,7 +23,6 @@ namespace JournalMediator.Services
         private readonly IUiController _ui;
         private readonly Flickr _flickr;
         private readonly FlickrConfig _config;
-        private FoundUser _me;
 
         public FlickrService(IPhotoProcessor photoProcessor, IUiController ui, FlickrConfig config)
         {
@@ -32,13 +31,18 @@ namespace JournalMediator.Services
             _photoProcessor = photoProcessor;
             _flickr = new Flickr(_config.ApiKey, _config.ApiSecret);
 
-            this.InitializeAsync().GetAwaiter().GetResult();
+            this.Authenticate();
         }
 
-        public async Task<Photoset> GetAlbumAsync(string albumName)
+        public Task<Photoset> GetAlbumAsync(string albumName)
         {
-            var albums = await _flickr.PhotosetsGetListAsync(this._me.UserId);
-            return albums.FirstOrDefault(x => x.Title == albumName);
+            var task = new TaskCompletionSource<Photoset>();
+            _flickr.PhotosetsGetListAsync((FlickrResult<PhotosetCollection> result) => {
+                var albums = result.Result;
+                var album = albums.FirstOrDefault(x => x.Title == albumName);
+                task.SetResult(album);
+            });
+            return task.Task;
         }
 
         public async Task<IEnumerable<PhotoInfo>> GetPhotosAsync(InputDocument inputDoc, bool fetchAllInfo = false)
@@ -58,8 +62,13 @@ namespace JournalMediator.Services
                 ? PhotoSearchExtras.OriginalDimensions | PhotoSearchExtras.Medium800Url
                     | PhotoSearchExtras.Medium640Url | PhotoSearchExtras.Small320Url
                 : PhotoSearchExtras.None;
-            var result = await _flickr.PhotosetsGetPhotosAsync(album.PhotosetId, extras);
-            var photos = result.Select(x => new Models.PhotoInfo(x));
+
+            var task = new TaskCompletionSource<PhotosetPhotoCollection>();
+            _flickr.PhotosetsGetPhotosAsync(album.PhotosetId, extras, (FlickrResult<PhotosetPhotoCollection> flickrResult) => {
+                task.SetResult(flickrResult.Result);
+            });
+            var result = await task.Task;
+            var photos = result.Select(x => new Models.PhotoInfo(x)).ToList();
 
             if (fetchAllInfo)
             {
@@ -82,33 +91,34 @@ namespace JournalMediator.Services
                 // TODO: Check if resize == false
                 _ui.WriteProperty($"Uploading {photo.Name}...");
                 _photoProcessor.ResizePhotoForUpload(photo, out Stream stream);
-                var photoId = await _flickr.UploadPictureAsync(stream, photo.Name, photo.Name,
+
+                var taskUpload = new TaskCompletionSource<string>();
+                _flickr.UploadPictureAsync(stream, photo.Name, photo.Name,
                     string.Empty, null, true, false, false, ContentType.None,
-                    SafetyLevel.None, HiddenFromSearch.None);
+                    SafetyLevel.None, HiddenFromSearch.None, (FlickrResult<string> flickrResult) => {
+                        taskUpload.SetResult(flickrResult.Result);
+                    });
+                var photoId = await taskUpload.Task;
 
                 album = album ?? await GetOrAddAlbumAsync(albumName, photoId);
 
-                await _flickr.PhotosetsAddPhotoAsync(album.PhotosetId, photoId);
-
-                _ui.WritePropertyLine(string.Empty, "Done");
+                var taskAddPhotoToAlbum = new TaskCompletionSource<NoResponse>();
+                _flickr.PhotosetsAddPhotoAsync(album.PhotosetId, photoId, (FlickrResult<NoResponse> flickResult) => {
+                    _ui.WritePropertyLine(string.Empty, "Done");
+                    taskAddPhotoToAlbum.SetResult(flickResult.Result);
+                });
+                await taskAddPhotoToAlbum.Task;
             }
         }
 
-        private async Task InitializeAsync()
-        {
-            await Authenticate();
-
-            this._me = await _flickr.PeopleFindByUserNameAsync(_config.Login);
-        }
-
-        private async Task Authenticate()
+        private void Authenticate()
         {
             _flickr.OAuthAccessToken = _config.AuthAccessToken;
             _flickr.OAuthAccessTokenSecret = _config.AuthAccessSecret;
 
             return;
 
-            var requestToken = await _flickr.OAuthRequestTokenAsync("http://localhost");
+            var requestToken = _flickr.OAuthGetRequestToken("oob");
             var url = _flickr.OAuthCalculateAuthorizationUrl(requestToken.Token, AuthLevel.Write);
 
             Console.WriteLine("Open this url:");
@@ -116,7 +126,7 @@ namespace JournalMediator.Services
             Console.WriteLine("and write the given token here:");
             var verifier = Console.ReadLine();
 
-            var accessToken = await _flickr.OAuthAccessTokenAsync(requestToken.Token, requestToken.TokenSecret, verifier);
+            var accessToken = _flickr.OAuthGetAccessToken(requestToken, verifier);
             _flickr.OAuthAccessToken = accessToken.Token;
             _flickr.OAuthAccessTokenSecret = accessToken.TokenSecret;
         }
@@ -126,7 +136,13 @@ namespace JournalMediator.Services
             var album = await GetAlbumAsync(albumName);
             if (album == null)
             {
-                album = await _flickr.PhotosetsCreateAsync(albumName, string.Empty, primaryPhotoId);
+                var task = new TaskCompletionSource<Photoset>();
+
+                _flickr.PhotosetsCreateAsync(albumName, string.Empty, primaryPhotoId, (FlickrResult<Photoset> flickrResult) => {
+                    task.SetResult(flickrResult.Result);
+                });
+
+                album = await task.Task;
             }
             return album;
         }
