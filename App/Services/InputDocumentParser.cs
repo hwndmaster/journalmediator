@@ -16,7 +16,7 @@ namespace JournalMediator.Services
 
     public class InputDocumentParser : IInputDocumentParser
     {
-        private readonly Regex _reTitle = new Regex(@"^\/\/\/ (?<title>[\w\s]+)\r", RegexOptions.Multiline);
+        private readonly Regex _reTitle = new Regex(@"^\/\/\/ (?<title>[\w\s\-]+)\r", RegexOptions.Multiline);
         private readonly Regex _rePhotoPath = new Regex(@"^\/\/\/ (?<path>[C-Z]:\\.+)\r", RegexOptions.Multiline);
         private readonly Regex _rePhotoPlaceholders = new Regex(@"\[(?<name>[^]]+)]");
 

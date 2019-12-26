@@ -21,6 +21,8 @@ namespace JournalMediator.Tests
             _htmlMock.Setup(x => x.Blockquote(It.IsAny<string>()))
                 .Returns((string text) => $"@{text}@");
             _htmlMock.Setup(x => x.Centered(It.IsAny<string>())).Returns((string text) => $"c[{text}]");
+            _htmlMock.Setup(x => x.FloatRight(It.IsAny<string>()))
+                .Returns((string text) => $"fr[{text}]");
             _htmlMock.Setup(x => x.Image(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .Returns((string url, string src, int height, int width) => $"<{url}/{src}/{height}/{width}>");
             _htmlMock.Setup(x => x.Link(It.IsAny<string>(), It.IsAny<string>()))
@@ -83,6 +85,30 @@ namespace JournalMediator.Tests
 
             // Verify
             Assert.Equal("test\nc[<web-url/small-url/120/100>]\ntest", output);
+        }
+
+        [Fact]
+        public void Formatting_floating_right_photo()
+        {
+            // Arrange
+            var chapter = new InputChapter {
+                Content = "test\n>>[photo1]>>\n\ntest"
+            };
+            var photos = new List<PhotoInfo> {
+                new PhotoInfo {
+                    Title = "photo1",
+                    Width = 100,
+                    Height = 120,
+                    WebUrl = "web-url",
+                    Small320Url = "small-url"
+                }
+            };
+
+            // Act
+            var output = _formatter.FormatPost(chapter, photos, false);
+
+            // Verify
+            Assert.Equal("test\nfr[<web-url/small-url/120/100>]test", output);
         }
 
         [Fact]

@@ -1,13 +1,8 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
-using System.Threading.Tasks;
-using FlickrNet;
-using JournalMediator.Models;
+﻿using JournalMediator.Models;
 using JournalMediator.Services;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
 
 namespace JournalMediator
 {
@@ -29,12 +24,14 @@ namespace JournalMediator
 
             var serviceProvider = GetServiceProvider();
 
-            app.OnExecute(async () =>
+            app.OnExecuteAsync(async (cancellationToken) =>
             {
                 await serviceProvider.GetService<Workflow>().Run(
                     optFileName.Value(),
                     optChapter.HasValue() ? optChapter.ParsedValue : (int?)null,
                     localLinking.HasValue());
+
+                return 0;
             });
 
             return app.Execute(args);

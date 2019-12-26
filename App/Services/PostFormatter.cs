@@ -15,6 +15,8 @@ namespace JournalMediator.Services
     {
         private const int MAX_WIDTH = 712;
         private const int MAX_HEIGHT = 600;
+        private const int MAX_WIDTH_FLOAT_RIGHT = 300;
+        private const int MAX_HEIGHT_FLOAT_RIGHT = 400;
         private const int GAP_BETWEEN_PHOTOS = 4;
 
         private readonly IHtmlPartProvider _html;
@@ -23,7 +25,7 @@ namespace JournalMediator.Services
         /// Like: [DSC_9992] [DSC_9997]
         /// Or: [DSC_9992] [DSC_9997] (photo title)
         /// </summary>
-        private readonly Regex _reLineWithPhotoDefinitions = new Regex(@"^\t?\[.*(\]|\))\s\s?", RegexOptions.Multiline);
+        private readonly Regex _reLineWithPhotoDefinitions = new Regex(@"^\t?(?<floatRight>\>\>)?\[.*(\]|\))(?<floatRight2>\>\>)?\s\s?", RegexOptions.Multiline);
         private readonly Regex _rePhotoDefinition = new Regex(@"\[(?<name>[^]]+)](\s\((?<title>[^\)]+)\))?");
 
         /// <summary>
@@ -74,17 +76,18 @@ namespace JournalMediator.Services
 
             content = _reLineWithPhotoDefinitions.Replace(content, (m) =>
             {
+                var floatRight = m.Groups["floatRight"].Success && m.Groups["floatRight2"].Success;
                 var photosInLine = (from photoMatch in _rePhotoDefinition.Matches(m.Value).Cast<Match>()
                                     let name = photoMatch.Groups["name"].Value.ToLower()
                                     let valid = photosBySourceName.ContainsKey(name)
-                                    select new {
+                                    select (
                                         name,
-                                        photo = valid ? photosBySourceName[name] : null,
-                                        title = photoMatch.Groups["title"].Success ? photoMatch.Groups["title"].Value : null,
+                                        photo: valid ? photosBySourceName[name] : null,
+                                        title: photoMatch.Groups["title"].Success ? photoMatch.Groups["title"].Value : null,
                                         valid
-                                    }).ToArray();
+                                   )).ToArray();
 
-                double desiredHeight = CalculateHeightForPhotosOnTheSameLine(
+                double desiredHeight = CalculateHeightForPhotosOnTheSameLine(floatRight,
                     photosInLine.Where(x => x.valid).Select(x => x.photo).ToList());
 
                 var line = "";
@@ -102,7 +105,7 @@ namespace JournalMediator.Services
                     }
                     else
                     {
-                        line += "<div style='padding: 40px 20px; border: 1px solid red; display: inline-block; color: red;'>NO PICTURE FOUND: '" + photo.name + "'</div>";
+                        line += _html.NoImage(photo.name);
                     }
 
                     if (!string.IsNullOrEmpty(photo.title))
@@ -111,7 +114,12 @@ namespace JournalMediator.Services
                     }
                 }
 
-                return WrapContentWithCenteredDiv(line);
+                if (floatRight)
+                {
+                    return _html.FloatRight(line);
+                }
+
+                return _html.Centered(line);
             });
             return content;
         }
@@ -182,31 +190,23 @@ namespace JournalMediator.Services
             return content;
         }
 
-        private double CalculateHeightForPhotosOnTheSameLine(IReadOnlyCollection<PhotoInfo> photosInLine)
+        private double CalculateHeightForPhotosOnTheSameLine(bool floatRight, IReadOnlyCollection<PhotoInfo> photosInLine)
         {
+            var maxWidth = floatRight ? MAX_WIDTH_FLOAT_RIGHT : MAX_WIDTH;
+            var maxHeight = floatRight ? MAX_HEIGHT_FLOAT_RIGHT : MAX_HEIGHT;
             var totalGapsWidth = (photosInLine.Count - 1) * GAP_BETWEEN_PHOTOS;
             var totalWithOfPhotos = photosInLine.Sum(x => x.Width);
-            double maxWidthInLine = Math.Min(MAX_WIDTH, totalWithOfPhotos) - totalGapsWidth;
+            double maxWidthInLine = Math.Min(maxWidth, totalWithOfPhotos) - totalGapsWidth;
             var numerator = photosInLine.Aggregate(1L, (i, photo) => i * photo.Height);
             var denominator = photosInLine.Sum(x => x.Width * photosInLine.Where(p0 => p0 != x).Aggregate(1L, (i, p0) => i * p0.Height));
             var desiredHeight = Math.Round(maxWidthInLine * numerator / denominator);
-            return Math.Min(MAX_HEIGHT, desiredHeight);
+            return Math.Min(maxHeight, desiredHeight);
         }
-
-        private string WrapContentWithCenteredDiv(string content) => _html.Centered(content);
 
         private string WrapContentWithBetterFont(string content)
             => $"{_html.DivForTextStart}{content}{_html.DivEnd}";
 
         private string WrapWithLjLayout(InputChapter chapter, string content)
-        {
-            content = content.Replace(Environment.NewLine, "<br/>");
-            content = $@"<style>a {{ color: #889 }}</style>
-<body style=""background: #343f4a; color: #ccc; font-family: 'trebuchet ms',helvetica,arial,sans-serif"">
-<div style=""width:770px; padding: 20px; background: #101921"">
-<h3 style=""color: #f93; margin: 10px 0"">{chapter.Title}</h3>{content}</div></body>";
-
-            return content;
-        }
+            => _html.LjLayout(content, chapter.Title);
     }
 }
